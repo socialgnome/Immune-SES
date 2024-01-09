@@ -3,15 +3,14 @@
 
 #### This script also creates Figure 1
 
-
 #### Prerequisites: 1. WGCNA_Analysis.R
 
+#### Run Order = 7
 
 
 ## Setup env
-
 library(here)
-dev.off()
+#dev.off()
 source(here("R/startup.R"))
 
 ## Load clustering results
@@ -146,17 +145,8 @@ for (i in 1:length(Final$ID)) {
 }
 Final = Final[order(Final$Cluster),]
 
-rdims = data.frame(Label = unique(Final$Cluster), Name = c("(I)", "(II)", "(III)"), stringsAsFactors = F)
 
-CH = as.data.frame(table(Final$Level1,Final$Cluster))
-fch = matrix(0, nrow = length(unique(Final$Cluster)), ncol = length(unique(Final$Level1)))
-for (i in 1:length(unique(Final$Cluster))) {
-  fch[i,] = CH$Freq[(((i-1)*length(unique(Final$Level1)))+1):(length(unique(Final$Level1))*i)]
-}
-colnames(fch) = sort(unique(Final$Level1))
-rownames(fch) = c("I", "II", "III")
-
-
+##### Chord diagram
 library(RColorBrewer)
 library(viridis)
 library(circlize)
@@ -165,34 +155,71 @@ library(ComplexHeatmap)
 library(gridBase)
 library(extrafont)
 
-rcols = c('#4E79A7', '#F28E2B', '#B07AA1')#, '#59A14F') #, '#59A14F')
-ccols = viridis(ncol(fch), alpha = 0.8)
-mycolor <- c(rcols, ccols)
+## Cluster legend
+rdims = data.frame(Label = unique(Final$Cluster), Name = c("(I)", "(II)", "(III)"), stringsAsFactors = F)
+rcols = c('#4E79A7', '#F28E2B', '#B07AA1')
+rname = c("I", "II", "III")
 
-lcols = rep(ccols, each = length(rcols))
-
-lcols = brewer.pal(10, "RdYlGn")
-lcols = c(lcols[1], lcols[10], lcols[1])
-lcols = rep(lcols, times = ncol(fch))
-
+## Reactome legend
 dims = data.frame(Label = LETTERS[seq( from = 1, to = length(unique(Final$Level1)))], Name = sort(unique(Final$Level1)), stringsAsFactors = F)
 dims$Label[dims$Label=="I"] = " I "
-colnames(fch) = dims$Label
+ccols = viridis(length(dims$Label), alpha = 0.8)
+mycolor <- c(rcols, ccols)
 
-library(circlize)
 
-mat = fch
+## Link colors
+lcols = rep(ccols, each = length(rcols))
+lcols = brewer.pal(10, "RdYlGn")
+lcols = c(lcols[1], lcols[10], lcols[1])
+lcols = rep(lcols, times = length(dims$Label))
+
+
+## Link data - Original
+df = data.frame(from = rep(rname, times = length(dims$Label)),
+                to = rep(dims$Label, each = length(rname)),
+                value = 0, value2 = 0,
+                stringsAsFactors = FALSE)
+
+for (i in 1:length(df$value)) {
+  clus = which(Final$Cluster==rdims$Label[rname==df$from[i]])
+  reac = which(Final$Level1==dims$Name[dims$Label==df$to[i]])
+  sel = intersect(clus, reac)
+  if (length(sel)>0) {
+    valp = Final$p.adjust[sel]
+    valc = Final$Cramer[sel]
+    valg =  length(unique(unlist(strsplit(Final$geneID[sel],"/"))))
+    valp = combine.test(valp, method = c("fisher"))
+    valc = median(valc)
+    
+    #df$value[i] = valp
+    df$value2[i] = valg
+    df$value[i] = length(sel)
+  }
+}
+#df$value[df$value!=0] = -log10(df$value[df$value!=0])
+
+df = df[,c(1:3)]
+## Draw 
 circos.clear()
 circos.par(start.degree = 90, clock.wise = FALSE)
 circos.initializeWithIdeogram(plotType = NULL)
 circlize_plot_dollar = function() {
   #circos.initialize(NULL)
-  chordDiagram(mat, annotationTrack = c("grid"),# "axis"),
+  chordDiagram(df, annotationTrack = c("grid"),# "axis"),
                grid.col = mycolor,
                col = lcols,
-               transparency = 0.25,
-               annotationTrackHeight = c(0.03, 0.01),
-               big.gap = 25)
+               transparency = 0.3,
+               diffHeight = mm_h(3),
+               annotationTrackHeight = mm_h(c(3, 0.01)), #2 is default; 2.5 or 3 is great
+               big.gap = 25, directional = 2, direction.type = c("arrows", "diffHeight"), link.arr.lwd = 2.2,
+               link.arr.length = 0.25, link.arr.col = lcols, link.arr.width = 0.25
+               ,link.arr.type = "triangle",
+               link.target.prop = F, small.gap = 1.2
+               , link.lwd = 1.2, link.border = "black"
+               #, link.zindex = rank(df[[3]]))
+               , link.sort = T, link.decreasing = T)
+  
+  #abline(v = 0, lty = 2, col = "#00000080")
   
   circos.track(track.index = 1, panel.fun = function(x, y) {
     xlim = get.cell.meta.data("xlim")
@@ -201,18 +228,87 @@ circlize_plot_dollar = function() {
     sector.name = get.cell.meta.data("sector.index")
     colidx = get.cell.meta.data("sector.numeric.index")
     
+    circos.axis(h = "bottom",direction = "inside", minor.ticks = 1, #h determines if axis is under or over grid
+                major.at = seq(from = 0, to = xlim[2]+5, by = 5), 
+                labels.cex = 0.9, labels.niceFacing = T)
+    
+    
     circos.text(mean(xlim), 
                 ylim[1], 
                 sector.name,
-                facing = "inside",
-                cex = 1.45, 
-                adj = c(0.5, -1.3),
+                facing = "inside", # facing determines if text is under or over axis
+                cex = 1.6, 
+                adj = c(0.5, -1.3), #1.3 adjust is the verticle space
                 col = mycolor[colidx],
                 #font = par(family = "Serif"),
                 niceFacing = T)}, 
     bg.border = NA)
 }
 circlize_plot_dollar()
+opar = par()
+
+tiff(str_c(here("Res/Review/"), "WGCNA_Reactome_Circle_1.tiff"), units="px", width=(6*1200), height=(6*900), res=600)
+plot.new()
+par(family = "Cambria", font = 2)
+circlize_plot_dollar()
+dev.off()
+
+
+
+## Draw 
+circos.clear()
+circos.par(start.degree = 90, clock.wise = FALSE)
+circos.initializeWithIdeogram(plotType = NULL)
+circlize_plot_dollar = function() {
+  #circos.initialize(NULL)
+  chordDiagram(df, annotationTrack = c("grid"),# "axis"),
+               grid.col = mycolor,
+               col = lcols,
+               transparency = 0.3,
+               diffHeight = mm_h(3),
+               annotationTrackHeight = mm_h(c(3, 0.01)), #2 is default; 2.5 or 3 is great
+               big.gap = 25, directional = 2, direction.type = c("arrows", "diffHeight"), link.arr.lwd = 2.2,
+               link.arr.length = 0.25, link.arr.col = lcols, link.arr.width = 0.25
+               ,link.arr.type = "none",
+               link.target.prop = F, small.gap = 1.2
+               , link.lwd = 1.2, link.border = "black"
+               #, link.zindex = rank(df[[3]]))
+               , link.sort = T, link.decreasing = T)
+  
+  #abline(v = 0, lty = 2, col = "#00000080")
+  
+  circos.track(track.index = 1, panel.fun = function(x, y) {
+    xlim = get.cell.meta.data("xlim")
+    xplot = get.cell.meta.data("xplot")
+    ylim = get.cell.meta.data("ylim")
+    sector.name = get.cell.meta.data("sector.index")
+    colidx = get.cell.meta.data("sector.numeric.index")
+    
+    circos.axis(h = "bottom",direction = "inside", minor.ticks = 1, #h determines if axis is under or over grid
+                major.at = seq(from = 0, to = xlim[2]+5, by = 5), 
+                labels.cex = 0.9, labels.niceFacing = T)
+    
+    
+    circos.text(mean(xlim), 
+                ylim[1], 
+                sector.name,
+                facing = "inside", # facing determines if text is under or over axis
+                cex = 1.6, 
+                adj = c(0.5, -1.3), #1.3 adjust is the verticle space
+                col = mycolor[colidx],
+                #font = par(family = "Serif"),
+                niceFacing = T)}, 
+    bg.border = NA)
+}
+circlize_plot_dollar()
+opar = par()
+
+tiff(str_c(here("Res/Review/"), "WGCNA_Reactome_Circle_2.tiff"), units="px", width=(6*1200), height=(6*900), res=600)
+plot.new()
+par(family = "Cambria", font = 2)
+circlize_plot_dollar()
+dev.off()
+
 
 lgd_list = Legend(
   labels = dims$Name,
@@ -221,7 +317,7 @@ lgd_list = Legend(
   title = "Reactome Pathways",
   type = "points",
   grid_height = unit(6.5, "mm"), grid_width = unit(6.5, "mm"),
-  pch = paste0(dims$Label,""),legend_gp = gpar(col = "white", font = 2, fontfamily = "Cambria"),                       
+  pch = paste0(dims$Label,""),legend_gp = gpar(col = "white", font = 2, fontfamily = "Cambria"),
   background = ccols, title_gap = unit(4, "mm"))
 
 lgd_groups = Legend(
@@ -231,7 +327,7 @@ lgd_groups = Legend(
   title = "WGCNA Clusters",
   type = "points",
   grid_height = unit(6.5, "mm"), grid_width = unit(6.5, "mm"),
-  pch = c("I", "II", "III"),legend_gp = gpar(col = "white", font = 2, fontfamily = "Cambria"),                       
+  pch = c("I", "II", "III"),legend_gp = gpar(col = "white", font = 2, fontfamily = "Cambria"),
   background = rcols, title_gap = unit(4, "mm"))
 
 lgd_reg = Legend(
@@ -241,49 +337,27 @@ lgd_reg = Legend(
   title = "Regulation",
   type = "lines",
   grid_height = unit(6.5, "mm"), grid_width = unit(6.5, "mm"),
-  legend_gp = gpar(col = c(lcols[1], lcols[2]),lwd = 4, alpha = 0.75, lineend = "butt"),                       
+  legend_gp = gpar(col = c(lcols[1], lcols[2]),lwd = 4, alpha = 0.75, lineend = "butt"),
   background = "white", title_gap = unit(4, "mm"))
 
-# tiff(str_c(here("Res/WGCNA/"), "WGCNA_Reactome_Circle.tiff"), units="px", width=(6*1500), height=(6*900), res=600)
-# plot.new()
-# par(family = "Calibri", font = 2)
-# circle_size = unit(1, "snpc") 
-# # snpc unit gives you a square region
-# pushViewport(viewport(x = 0, y = 0.5, width = circle_size, height = circle_size, just = c("left", "center")))
-# par(omi = gridOMI(), new = TRUE)
-# circlize_plot_dollar()
-# upViewport()
-# #"just" indicates the sides that align with x and y
-# pushViewport(viewport(x = 0.55, y = 0.55,width = circle_size, height = circle_size, just = "left"))
-# grid.draw(lgd_list)
-# upViewport()
-# pushViewport(viewport(x = 0.55, y = 0.3, width = circle_size, height = circle_size, just = "left"))
-# grid.draw(lgd_groups)
-# upViewport()
-# dev.off()
-opar = par()
 
-tiff(str_c(here("Res/WGCNA/"), "WGCNA_Reactome_Circle1.tiff"), units="px", width=(6*1200), height=(6*900), res=600)
-plot.new()
-par(family = "Cambria", font = 2)
-circlize_plot_dollar()
-dev.off()
 
 par = opar
-tiff(str_c(here("Res/WGCNA/"), "WGCNA_Reactome_Circle2.tiff"), units="px", width=(6*1200), height=(6*900), res=600)
+tiff(str_c(here("Res/Review/"), "WGCNA_Reactome_Circle2.tiff"), units="px", width=(6*1200), height=(6*900), res=600)
 plot.new()
 #par(family = "Calibri", font = 2)
 grid.draw(lgd_list)
 dev.off()
 
-tiff(str_c(here("Res/WGCNA/"), "WGCNA_Reactome_Circle3.tiff"), units="px", width=(6*1200), height=(6*900), res=600)
+tiff(str_c(here("Res/Review/"), "WGCNA_Reactome_Circle3.tiff"), units="px", width=(6*1200), height=(6*900), res=600)
 plot.new()
 #par(family = "Calibri", font = 2)
 grid.draw(lgd_groups)
 dev.off()
 
-tiff(str_c(here("Res/WGCNA/"), "WGCNA_Reactome_Circle4.tiff"), units="px", width=(6*1200), height=(6*900), res=600)
+tiff(str_c(here("Res/Review/"), "WGCNA_Reactome_Circle4.tiff"), units="px", width=(6*1200), height=(6*900), res=600)
 plot.new()
 #par(family = "Calibri", font = 2)
 grid.draw(lgd_reg)
 dev.off()
+

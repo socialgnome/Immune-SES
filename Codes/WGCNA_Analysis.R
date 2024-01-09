@@ -4,6 +4,9 @@
 
 #### Prerequisites: 1. WGCNA.R
 
+#### Run Order = 5
+
+
 ## Setup env
 
 library(here)
@@ -198,8 +201,8 @@ p = ggplot(data, aes(x = Neg, y = Cluster, color = OddsCat2, fill = Odds, size =
   
   theme(strip.text = element_text(angle = 0, family = "Calibri", face = "bold", size = 15))+
   theme(panel.spacing =unit(0.1, "lines"),
-        panel.border = element_rect(color = "#476b6b", fill = NA, linewidth = 1), 
-        strip.background = element_rect(color = "#476b6b", linewidth = 1, fill = "#d6dce4"))+
+        panel.border = element_rect(color = "#476b6b", fill = NA, linewidth = 1.5), 
+        strip.background = element_rect(color = "#476b6b", linewidth = 1.5, fill = "#d6dce4"))+
   theme(axis.ticks = element_line(linewidth=1,color='#476b6b')) +
   
   xlab("Cluster-SES Relationship<br/>-Log~10~ (Adj. *p*)") + ylab("WGCNA Cluster Label") + ggtitle("") + theme(panel.background = element_rect(colour = "grey70")) +

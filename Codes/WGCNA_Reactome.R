@@ -3,8 +3,9 @@
 
 #### This script also creates Supplementary Figure S1, S4 and Dataset S2
 
-
 #### Prerequisites: 1. WGCNA_Analysis.R
+
+#### Run Order = 6
 
 ## Setup env
 

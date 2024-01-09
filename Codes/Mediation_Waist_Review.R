@@ -2,7 +2,7 @@
 
 #### Prerequisites: 1. Expression_Set_Creation.R
 
-#### Run Order = 12
+#### Run Order = 13
 
 
 ## Setup env
@@ -15,6 +15,8 @@ library(foreach)
 library(parallel)
 library(doParallel)
 library(bigmemory)
+library(haven)
+
 
 ## Load expression data
 dat = readRDS(str_c(here("data/"), "/Filtered_ExpressionSet_Clustering_SelSubData.rds"))
@@ -25,6 +27,12 @@ subData = Biobase::pData(dat)
 treatment = c("ses_sss_composite","sss_5","SEI_ff5",
               "edu_max","income_hh_ff5")
 
+## Additional Mediators
+data_input = "Z:/Data/wave5/"
+df = read_xpt(str_c(data_input, "banthro5.xpt"))
+subData$waist = df$H5WAIST[match(subData$AID, df$AID)]
+
+
 controls = c(
   "sex_interv", "re","age_w5"
   ,"pregnant_biow5", "FastHrs","Plate"
@@ -34,22 +42,21 @@ controls = c(
 imp_vars = c("batch")
 
 mediators = c(
-  "stress_perceived",
-  "w5bmi",
-  "bills",
-  "currentsmoke",
-  "insurance_lack",
-  "alcohol_use"
+  "w5bmi"
+  ,"waist"
 )
 
+
+
 subData = subData %>% dplyr::select(AID,all_of(treatment), all_of(controls), all_of(mediators))
+subData$waist[which(subData$waist==9994 | subData$waist==9996 | subData$waist==9997 | subData$waist==9999)] = NA
+
 non_missing = complete.cases(subData)
 subData = subData[non_missing, ]
 subData = droplevels(subData)
 exprs = exprs[,non_missing]
 all.equal(colnames(exprs), subData$AID)
 
-subData$alcohol_use = factor(subData$alcohol_use, levels = c("Never", "Mild", "Moderate", "Severe"))
 subData[,which(colnames(subData) %in% treatment | colnames(subData) %in% mediators)] <- sapply(subData[,which(colnames(subData) %in% treatment | colnames(subData) %in% mediators)], as.numeric)
 
 ## Mediation function and extraction
@@ -105,7 +112,7 @@ exp = as.big.matrix(exprs)
 exp1 = describe(exp)
 rm(exprs)
 strt<-Sys.time()
-cl <- parallel::makeCluster(24)
+cl <- parallel::makeCluster(20)
 doParallel::registerDoParallel(cl)
 clusterEvalQ(cl, library(stringr))
 clusterEvalQ(cl, library(mediation))
@@ -121,7 +128,7 @@ fullout = foreach(i=1:length(treat) ,.packages = "foreach") %dopar% {
 parallel::stopCluster(cl)
 print(Sys.time()-strt)
 fullout = setNames(fullout, genes)
-saveRDS(fullout, str_c(here("Res/"), "/Mediation/SES/Filtered_genes.rds"))
-saveRDS(meds, str_c(here("Res/"), "/Mediation/SES/Mediators.rds"))
-saveRDS(genes, str_c(here("Res/"), "/Mediation/SES/Genes.rds"))
+saveRDS(fullout, str_c(here("Res/"), "/Mediation/Review/Filtered_genes.rds"))
+saveRDS(meds, str_c(here("Res/"), "/Mediation/Review/Mediators.rds"))
+saveRDS(genes, str_c(here("Res/"), "/Mediation/Review/Genes.rds"))
 
